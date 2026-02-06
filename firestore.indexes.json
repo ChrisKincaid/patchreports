@@ -1,0 +1,47 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "cves",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "publishedDate",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "cvssScore",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "cves",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "vendors",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "publishedDate",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "watchList",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "vendor",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "addedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

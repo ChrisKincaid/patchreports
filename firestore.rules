@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function validateWatchListItem() {
+      return request.resource.data.keys().hasAll(['vendor', 'product', 'addedAt']) &&
+             request.resource.data.vendor is string &&
+             request.resource.data.vendor.size() > 0 &&
+             request.resource.data.vendor.size() <= 100 &&
+             request.resource.data.product is string &&
+             request.resource.data.product.size() > 0 &&
+             request.resource.data.product.size() <= 100 &&
+             request.resource.data.addedAt is timestamp;
+    }
+    
+    function validateUserProfile() {
+      let allowedKeys = ['email', 'createdAt', 'lastChecked', 'notificationsEnabled'];
+      return request.resource.data.keys().hasAll(['email', 'createdAt']) &&
+             request.resource.data.keys().hasOnly(allowedKeys) &&
+             request.resource.data.email is string &&
+             request.resource.data.email == request.auth.token.email &&
+             request.resource.data.createdAt is timestamp;
+    }
+    
+    // User profiles - users can only read/write their own profile
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && validateUserProfile();
+      allow update: if isOwner(userId) && validateUserProfile();
+      allow delete: if isOwner(userId);
+    }
+    
+    // Watch lists - users can only access their own watch list
+    match /users/{userId}/watchList/{itemId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && validateWatchListItem();
+      allow update: if isOwner(userId) && validateWatchListItem();
+      allow delete: if isOwner(userId);
+      allow list: if isOwner(userId);
+    }
+    
+    // CVE cache - read-only for authenticated users, write-only for Cloud Functions
+    match /cves/{cveId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only Cloud Functions can write
+    }
+    
+    // Audit logs - read-only for the user, write-only for Cloud Functions
+    match /audit/{logId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow write: if false; // Only Cloud Functions can write
+    }
+    
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
