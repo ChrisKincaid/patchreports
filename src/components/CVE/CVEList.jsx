@@ -5,7 +5,11 @@ import {
   ChevronDown, 
   ChevronRight,
   Calendar,
-  Shield
+  Shield,
+  Lock,
+  Zap,
+  Target,
+  Bug
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -49,6 +53,21 @@ function CVEList({ cves, watchList }) {
     });
   };
 
+  const getMatchingVendors = (cve) => {
+    if (!cve.vendors || !watchList) return [];
+    
+    return [...new Set(
+      watchList
+        .filter(item => {
+          const vendorMatch = item.vendor.toLowerCase();
+          return cve.vendors.some(v => 
+            v.toLowerCase().includes(vendorMatch) || vendorMatch.includes(v.toLowerCase())
+          );
+        })
+        .map(item => item.vendor)
+    )];
+  };
+
   const toggleExpand = (cveId) => {
     setExpandedCVE(expandedCVE === cveId ? null : cveId);
   };
@@ -68,6 +87,7 @@ function CVEList({ cves, watchList }) {
       {cves.map(cve => {
         const isExpanded = expandedCVE === cve.id;
         const matchingItems = getMatchingWatchItems(cve);
+        const matchingVendors = getMatchingVendors(cve);
         const publishDate = cve.publishedDate?.toDate();
 
         return (
@@ -93,10 +113,14 @@ function CVEList({ cves, watchList }) {
                       <Calendar size={14} />
                       {publishDate ? format(publishDate, 'MMM d, yyyy') : 'Unknown'}
                     </span>
-                    {cve.matchedItem && (
-                      <span className="meta-item watch-matches">
-                        Matches: {cve.matchedItem.vendor}/{cve.matchedItem.product}
-                      </span>
+                    {matchingVendors.length > 0 && (
+                      <div className="vendor-badges">
+                        {matchingVendors.map((vendor, idx) => (
+                          <span key={idx} className="vendor-badge">
+                            {vendor.charAt(0).toUpperCase() + vendor.slice(1)}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -112,6 +136,78 @@ function CVEList({ cves, watchList }) {
                   <h4>Description</h4>
                   <p>{cve.description}</p>
                 </div>
+
+                {cve.cwe && cve.cwe.length > 0 && (
+                  <div className="detail-section">
+                    <h4><Bug size={16} style={{display: 'inline', marginRight: '0.25rem', verticalAlign: 'text-bottom'}} />Weakness Type (CWE)</h4>
+                    <div className="tag-list">
+                      {cve.cwe.map((cweId, idx) => (
+                        <a 
+                          key={idx} 
+                          href={`https://cwe.mitre.org/data/definitions/${cweId.replace('CWE-', '')}.html`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="tag tag-link"
+                          style={{cursor: 'pointer'}}
+                        >
+                          {cweId}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(cve.attackVector || cve.attackComplexity || cve.privilegesRequired || cve.userInteraction) && (
+                  <div className="detail-section">
+                    <h4><Shield size={16} style={{display: 'inline', marginRight: '0.25rem', verticalAlign: 'text-bottom'}} />Attack Characteristics</h4>
+                    <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem'}}>
+                      {cve.attackVector && (
+                        <div className="metric-item">
+                          <span className="metric-label"><Target size={14} /> Attack Vector:</span>
+                          <span className="metric-value">{cve.attackVector}</span>
+                        </div>
+                      )}
+                      {cve.attackComplexity && (
+                        <div className="metric-item">
+                          <span className="metric-label"><Zap size={14} /> Complexity:</span>
+                          <span className="metric-value">{cve.attackComplexity}</span>
+                        </div>
+                      )}
+                      {cve.privilegesRequired && (
+                        <div className="metric-item">
+                          <span className="metric-label"><Lock size={14} /> Privileges:</span>
+                          <span className="metric-value">{cve.privilegesRequired}</span>
+                        </div>
+                      )}
+                      {cve.userInteraction && (
+                        <div className="metric-item">
+                          <span className="metric-label">User Interaction:</span>
+                          <span className="metric-value">{cve.userInteraction}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {(cve.exploitabilityScore || cve.impactScore) && (
+                  <div className="detail-section">
+                    <h4>CVSS Scores</h4>
+                    <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem'}}>
+                      {cve.exploitabilityScore && (
+                        <div className="score-box">
+                          <div className="score-label">Exploitability</div>
+                          <div className="score-value">{cve.exploitabilityScore.toFixed(1)}</div>
+                        </div>
+                      )}
+                      {cve.impactScore && (
+                        <div className="score-box">
+                          <div className="score-label">Impact</div>
+                          <div className="score-value">{cve.impactScore.toFixed(1)}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {cve.vendors && cve.vendors.length > 0 && (
                   <div className="detail-section">
@@ -144,9 +240,9 @@ function CVEList({ cves, watchList }) {
 
                 {cve.references && cve.references.length > 0 && (
                   <div className="detail-section">
-                    <h4>References</h4>
+                    <h4>References ({cve.references.length})</h4>
                     <ul className="references-list">
-                      {cve.references.slice(0, 5).map((ref, idx) => (
+                      {cve.references.slice(0, 8).map((ref, idx) => (
                         <li key={idx}>
                           <a 
                             href={ref.url} 
@@ -154,11 +250,23 @@ function CVEList({ cves, watchList }) {
                             rel="noopener noreferrer"
                             className="reference-link"
                           >
-                            {ref.source || ref.url}
+                            {ref.source || new URL(ref.url).hostname}
                             <ExternalLink size={14} />
                           </a>
+                          {ref.tags && ref.tags.length > 0 && (
+                            <div className="ref-tags">
+                              {ref.tags.slice(0, 3).map((tag, tidx) => (
+                                <span key={tidx} className="ref-tag">{tag}</span>
+                              ))}
+                            </div>
+                          )}
                         </li>
                       ))}
+                      {cve.references.length > 8 && (
+                        <li style={{color: 'var(--text-muted)', fontStyle: 'italic'}}>
+                          +{cve.references.length - 8} more references
+                        </li>
+                      )}
                     </ul>
                   </div>
                 )}

@@ -38,6 +38,7 @@ function Dashboard() {
   const [activeSeverityFilter, setActiveSeverityFilter] = useState('ALL');
   const [matchQualityFilter, setMatchQualityFilter] = useState('ALL');
   const [dateRangeFilter, setDateRangeFilter] = useState(1); // days to show
+  const [vendorFilter, setVendorFilter] = useState('ALL'); // vendor filter
   const [viewMode, setViewMode] = useState('my'); // 'my' or 'org'
   const [myStats, setMyStats] = useState({
     total: 0,
@@ -314,6 +315,17 @@ function Dashboard() {
     }
     // Organization view: show all CVEs (no watch list filter)
     
+    // Apply vendor filter
+    if (vendorFilter !== 'ALL') {
+      const hasVendor = cve.vendors?.some(v => 
+        v.toLowerCase().includes(vendorFilter.toLowerCase()) ||
+        vendorFilter.toLowerCase().includes(v.toLowerCase())
+      );
+      if (!hasVendor) {
+        return false;
+      }
+    }
+    
     // Apply severity filter
     if (activeSeverityFilter !== 'ALL' && cve.severity !== activeSeverityFilter) {
       return false;
@@ -581,18 +593,33 @@ function Dashboard() {
                   </>
                 )}
               </div>
-              <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                <label style={{fontSize: '0.9rem', color: 'var(--text-muted)'}}>Match Quality:</label>
-                <select 
-                  value={matchQualityFilter} 
-                  onChange={(e) => setMatchQualityFilter(e.target.value)}
-                  style={{padding: '0.4rem 0.6rem', borderRadius: 'var(--radius)', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)'}}
-                >
-                  <option value="ALL">All Results</option>
-                  <option value="EXACT">🎯 Exact Match</option>
-                  <option value="CLOSE">🔍 Close Match</option>
-                  <option value="POSSIBLE">💡 Possible Match</option>
-                </select>
+              <div style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
+                <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                  <label style={{fontSize: '0.9rem', color: 'var(--text-muted)'}}>Vendor:</label>
+                  <select 
+                    value={vendorFilter} 
+                    onChange={(e) => setVendorFilter(e.target.value)}
+                    style={{padding: '0.4rem 0.6rem', borderRadius: 'var(--radius)', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)'}}
+                  >
+                    <option value="ALL">All Vendors</option>
+                    {[...new Set(watchList.map(item => item.vendor).filter(v => v && v !== '*'))].sort().map(vendor => (
+                      <option key={vendor} value={vendor}>{vendor.charAt(0).toUpperCase() + vendor.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                  <label style={{fontSize: '0.9rem', color: 'var(--text-muted)'}}>Match Quality:</label>
+                  <select 
+                    value={matchQualityFilter} 
+                    onChange={(e) => setMatchQualityFilter(e.target.value)}
+                    style={{padding: '0.4rem 0.6rem', borderRadius: 'var(--radius)', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)'}}
+                  >
+                    <option value="ALL">All Results</option>
+                    <option value="EXACT">🎯 Exact Match</option>
+                    <option value="CLOSE">🔍 Close Match</option>
+                    <option value="POSSIBLE">💡 Possible Match</option>
+                  </select>
+                </div>
               </div>
             </div>
 

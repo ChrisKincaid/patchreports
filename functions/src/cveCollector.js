@@ -290,21 +290,37 @@ function extractCVSSInfo(cve) {
     
     // Try CVSS v3.1 first
     if (metrics.cvssMetricV31 && metrics.cvssMetricV31.length > 0) {
-      const cvssData = metrics.cvssMetricV31[0].cvssData;
+      const metric = metrics.cvssMetricV31[0];
+      const cvssData = metric.cvssData;
       return {
         cvssScore: cvssData.baseScore,
         severity: cvssData.baseSeverity,
-        vector: cvssData.vectorString
+        vector: cvssData.vectorString,
+        attackVector: cvssData.attackVector,
+        attackComplexity: cvssData.attackComplexity,
+        privilegesRequired: cvssData.privilegesRequired,
+        userInteraction: cvssData.userInteraction,
+        scope: cvssData.scope,
+        exploitabilityScore: metric.exploitabilityScore,
+        impactScore: metric.impactScore
       };
     }
     
     // Fallback to CVSS v3.0
     if (metrics.cvssMetricV30 && metrics.cvssMetricV30.length > 0) {
-      const cvssData = metrics.cvssMetricV30[0].cvssData;
+      const metric = metrics.cvssMetricV30[0];
+      const cvssData = metric.cvssData;
       return {
         cvssScore: cvssData.baseScore,
         severity: cvssData.baseSeverity,
-        vector: cvssData.vectorString
+        vector: cvssData.vectorString,
+        attackVector: cvssData.attackVector,
+        attackComplexity: cvssData.attackComplexity,
+        privilegesRequired: cvssData.privilegesRequired,
+        userInteraction: cvssData.userInteraction,
+        scope: cvssData.scope,
+        exploitabilityScore: metric.exploitabilityScore,
+        impactScore: metric.impactScore
       };
     }
     
@@ -321,7 +337,11 @@ function extractCVSSInfo(cve) {
       return {
         cvssScore: score,
         severity: severity,
-        vector: cvssData.vectorString
+        vector: cvssData.vectorString,
+        attackVector: cvssData.accessVector,
+        attackComplexity: cvssData.accessComplexity,
+        exploitabilityScore: null,
+        impactScore: null
       };
     }
   } catch (error) {
@@ -331,7 +351,13 @@ function extractCVSSInfo(cve) {
   return {
     cvssScore: 0,
     severity: 'UNKNOWN',
-    vector: null
+    vector: null,
+    attackVector: null,
+    attackComplexity: null,
+    privilegesRequired: null,
+    userInteraction: null,
+    exploitabilityScore: null,
+    impactScore: null
   };
 }
 
@@ -363,10 +389,24 @@ async function processCVE(vulnerability) {
     // Extract CVSS information
     const cvssInfo = extractCVSSInfo(vulnerability);
     
+    // Extract CWE (Common Weakness Enumeration)
+    const weaknesses = cve.weaknesses || [];
+    const cweList = [];
+    weaknesses.forEach(weakness => {
+      if (weakness.description) {
+        weakness.description.forEach(desc => {
+          if (desc.value && desc.value.startsWith('CWE-')) {
+            cweList.push(desc.value);
+          }
+        });
+      }
+    });
+    
     // Extract references
     const references = (cve.references || []).map(ref => ({
       url: ref.url,
-      source: ref.source
+      source: ref.source,
+      tags: ref.tags || []
     }));
     
     // Create CVE document
@@ -378,6 +418,14 @@ async function processCVE(vulnerability) {
       cvssScore: cvssInfo.cvssScore,
       severity: cvssInfo.severity,
       cvssVector: cvssInfo.vector,
+      attackVector: cvssInfo.attackVector,
+      attackComplexity: cvssInfo.attackComplexity,
+      privilegesRequired: cvssInfo.privilegesRequired,
+      userInteraction: cvssInfo.userInteraction,
+      scope: cvssInfo.scope,
+      exploitabilityScore: cvssInfo.exploitabilityScore,
+      impactScore: cvssInfo.impactScore,
+      cwe: cweList,
       publishedDate: admin.firestore.Timestamp.fromDate(new Date(cve.published)),
       lastModifiedDate: admin.firestore.Timestamp.fromDate(new Date(cve.lastModified)),
       references: references,
