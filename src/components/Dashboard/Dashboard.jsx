@@ -22,7 +22,9 @@ import {
   Calendar,
   Filter,
   HelpCircle,
-  Database
+  Database,
+  Users,
+  Building2
 } from 'lucide-react';
 import { subDays, format } from 'date-fns';
 
@@ -36,7 +38,19 @@ function Dashboard() {
   const [activeSeverityFilter, setActiveSeverityFilter] = useState('ALL');
   const [matchQualityFilter, setMatchQualityFilter] = useState('ALL');
   const [dateRangeFilter, setDateRangeFilter] = useState(1); // days to show
-  const [stats, setStats] = useState({
+  const [viewMode, setViewMode] = useState('my'); // 'my' or 'org'
+  const [myStats, setMyStats] = useState({
+    total: 0,
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+    newToday: 0,
+    exactMatches: 0,
+    closeMatches: 0,
+    possibleMatches: 0
+  });
+  const [orgStats, setOrgStats] = useState({
     total: 0,
     critical: 0,
     high: 0,
@@ -119,24 +133,46 @@ function Dashboard() {
         console.log(`[DEBUG] First watch item:`, watchItems[0]);
       }
 
-      // Calculate statistics
-      const newStats = {
-        total: cvesWithMatches.length,
-        critical: cvesWithMatches.filter(c => c.severity === 'CRITICAL').length,
-        high: cvesWithMatches.filter(c => c.severity === 'HIGH').length,
-        medium: cvesWithMatches.filter(c => c.severity === 'MEDIUM').length,
-        low: cvesWithMatches.filter(c => c.severity === 'LOW').length,
-        newToday: cvesWithMatches.filter(c => {
+      // Calculate statistics - both for matched CVEs and all CVEs
+      const myCVEs = cvesWithMatches.filter(c => c.matchQuality); // Only CVEs matching user's watch list
+      const allCVEsData = cvesWithMatches; // All CVEs in organization
+      
+      // My CVEs stats (only matching user's watch list)
+      const newMyStats = {
+        total: myCVEs.length,
+        critical: myCVEs.filter(c => c.severity === 'CRITICAL').length,
+        high: myCVEs.filter(c => c.severity === 'HIGH').length,
+        medium: myCVEs.filter(c => c.severity === 'MEDIUM').length,
+        low: myCVEs.filter(c => c.severity === 'LOW').length,
+        newToday: myCVEs.filter(c => {
           const pubDate = c.publishedDate.toDate();
           const today = new Date();
           return pubDate.toDateString() === today.toDateString();
         }).length,
-        exactMatches: cvesWithMatches.filter(c => c.matchQuality === 'EXACT').length,
-        closeMatches: cvesWithMatches.filter(c => c.matchQuality === 'CLOSE').length,
-        possibleMatches: cvesWithMatches.filter(c => c.matchQuality === 'POSSIBLE').length
+        exactMatches: myCVEs.filter(c => c.matchQuality === 'EXACT').length,
+        closeMatches: myCVEs.filter(c => c.matchQuality === 'CLOSE').length,
+        possibleMatches: myCVEs.filter(c => c.matchQuality === 'POSSIBLE').length
+      };
+      
+      // Organization stats (all CVEs)
+      const newOrgStats = {
+        total: allCVEsData.length,
+        critical: allCVEsData.filter(c => c.severity === 'CRITICAL').length,
+        high: allCVEsData.filter(c => c.severity === 'HIGH').length,
+        medium: allCVEsData.filter(c => c.severity === 'MEDIUM').length,
+        low: allCVEsData.filter(c => c.severity === 'LOW').length,
+        newToday: allCVEsData.filter(c => {
+          const pubDate = c.publishedDate.toDate();
+          const today = new Date();
+          return pubDate.toDateString() === today.toDateString();
+        }).length,
+        exactMatches: allCVEsData.filter(c => c.matchQuality === 'EXACT').length,
+        closeMatches: allCVEsData.filter(c => c.matchQuality === 'CLOSE').length,
+        possibleMatches: allCVEsData.filter(c => c.matchQuality === 'POSSIBLE').length
       };
 
-      setStats(newStats);
+      setMyStats(newMyStats);
+      setOrgStats(newOrgStats);
       setCves(cvesWithMatches);
     } catch (err) {
       console.error('Error loading dashboard data:', err);
@@ -230,9 +266,9 @@ function Dashboard() {
       
       if (timeRange <= 120) {
         // Use regular collection for 120 days or less
-        console.log(`[FRONTEND] Calling collectCVEsManual with { daysBack: ${timeRange} }`);
+        console.log(`[FRONTEND] Calling collectCVEsManual with { daysBack: ${timeRange}, userId: ${currentUser.uid} }`);
         const collectCVEs = httpsCallable(functions, 'collectCVEsManual');
-        result = await collectCVEs({ daysBack: timeRange });
+        result = await collectCVEs({ daysBack: timeRange, userId: currentUser.uid });
       } else {
         // Use historical load for longer periods
         const months = Math.ceil(timeRange / 30);
@@ -265,7 +301,19 @@ function Dashboard() {
     }
   };
 
+  // Use appropriate stats based on view mode
+  const activeStats = viewMode === 'my' ? myStats : orgStats;
+
   const filteredCVEs = cves.filter(cve => {
+    // Filter by view mode
+    if (viewMode === 'my') {
+      // My CVEs: only show CVEs matching user's watch list
+      if (!cve.matchQuality) {
+        return false;
+      }
+    }
+    // Organization view: show all CVEs (no watch list filter)
+    
     // Apply severity filter
     if (activeSeverityFilter !== 'ALL' && cve.severity !== activeSeverityFilter) {
       return false;
@@ -274,7 +322,7 @@ function Dashboard() {
     // Apply match quality filter
     if (matchQualityFilter !== 'ALL') {
       // If user selected a specific match quality, only show CVEs with that quality
-      if (!cve.matchQuality || cve.matchQuality !== matchQualityFilter) {
+      if (cve.matchQuality !== matchQualityFilter) {
         return false;
       }
     }
@@ -297,14 +345,58 @@ function Dashboard() {
       
       <main className="main-content">
         <div className="content-header">
-          <div>
-            <h1>CVE Dashboard</h1>
-            <p>
-              {userProfile?.lastChecked 
-                ? `Last updated: ${new Date(userProfile.lastChecked.toDate()).toLocaleString()}`
-                : 'Never updated'
-              }
-            </p>
+          <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%'}}>
+            <div>
+              <h1>CVE Dashboard</h1>
+              <p>
+                {userProfile?.lastChecked 
+                  ? `Last updated: ${new Date(userProfile.lastChecked.toDate()).toLocaleString()}`
+                  : 'Never updated'
+                }
+              </p>
+            </div>
+            
+            {/* View Mode Toggle */}
+            <div style={{display: 'flex', gap: '0.5rem', background: 'var(--bg-secondary)', padding: '0.25rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)'}}>
+              <button
+                onClick={() => setViewMode('my')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: 'calc(var(--radius) - 2px)',
+                  border: 'none',
+                  background: viewMode === 'my' ? 'var(--primary)' : 'transparent',
+                  color: viewMode === 'my' ? 'white' : 'var(--text-primary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontWeight: viewMode === 'my' ? '600' : '400',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Users size={18} />
+                My CVEs
+              </button>
+              <button
+                onClick={() => setViewMode('org')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: 'calc(var(--radius) - 2px)',
+                  border: 'none',
+                  background: viewMode === 'org' ? 'var(--primary)' : 'transparent',
+                  color: viewMode === 'org' ? 'white' : 'var(--text-primary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  fontWeight: viewMode === 'org' ? '600' : '400',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Building2 size={18} />
+                Organization
+              </button>
+            </div>
           </div>
         </div>
 
@@ -382,7 +474,7 @@ function Dashboard() {
                 onClick={() => setActiveSeverityFilter('ALL')}
                 style={{cursor: 'pointer'}}
               >
-                <div className="stat-value">{stats.total}</div>
+                <div className="stat-value">{activeStats.total}</div>
                 <div className="stat-label">All CVEs</div>
               </div>
               <div 
@@ -390,7 +482,7 @@ function Dashboard() {
                 onClick={() => setActiveSeverityFilter('CRITICAL')}
                 style={{cursor: 'pointer'}}
               >
-                <div className="stat-value">{stats.critical}</div>
+                <div className="stat-value">{activeStats.critical}</div>
                 <div className="stat-label">Critical</div>
               </div>
               <div 
@@ -398,7 +490,7 @@ function Dashboard() {
                 onClick={() => setActiveSeverityFilter('HIGH')}
                 style={{cursor: 'pointer'}}
               >
-                <div className="stat-value">{stats.high}</div>
+                <div className="stat-value">{activeStats.high}</div>
                 <div className="stat-label">High</div>
               </div>
               <div 
@@ -406,7 +498,7 @@ function Dashboard() {
                 onClick={() => setActiveSeverityFilter('MEDIUM')}
                 style={{cursor: 'pointer'}}
               >
-                <div className="stat-value">{stats.medium}</div>
+                <div className="stat-value">{activeStats.medium}</div>
                 <div className="stat-label">Medium</div>
               </div>
               <div 
@@ -414,26 +506,26 @@ function Dashboard() {
                 onClick={() => setActiveSeverityFilter('LOW')}
                 style={{cursor: 'pointer'}}
               >
-                <div className="stat-value">{stats.low}</div>
+                <div className="stat-value">{activeStats.low}</div>
                 <div className="stat-label">Low</div>
               </div>
               <div className="stat-card stat-new">
-                <div className="stat-value">{stats.newToday}</div>
+                <div className="stat-value">{activeStats.newToday}</div>
                 <div className="stat-label">New Today</div>
               </div>
             </div>
 
             <div className="stats-grid match-quality-stats">
               <div className="stat-card stat-exact">
-                <div className="stat-value">{stats.exactMatches}</div>
+                <div className="stat-value">{activeStats.exactMatches}</div>
                 <div className="stat-label">🎯 Exact Match</div>
               </div>
               <div className="stat-card stat-close">
-                <div className="stat-value">{stats.closeMatches}</div>
+                <div className="stat-value">{activeStats.closeMatches}</div>
                 <div className="stat-label">🔍 Close Match</div>
               </div>
               <div className="stat-card stat-possible">
-                <div className="stat-value">{stats.possibleMatches}</div>
+                <div className="stat-value">{activeStats.possibleMatches}</div>
                 <div className="stat-label">💡 Possible Match</div>
               </div>
             </div>
@@ -477,7 +569,17 @@ function Dashboard() {
 
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', padding: '0.75rem', background: 'var(--bg-secondary)', borderRadius: 'var(--radius)'}}>
               <div style={{fontSize: '1rem', color: 'var(--text-primary)'}}>
-                Showing <strong>{filteredCVEs.length}</strong> of <strong>{stats.total}</strong> CVEs
+                {viewMode === 'my' ? (
+                  <>
+                    <Users size={16} style={{display: 'inline', marginRight: '0.25rem', verticalAlign: 'text-bottom'}} />
+                    Showing <strong>{filteredCVEs.length}</strong> of <strong>{activeStats.total}</strong> CVEs matching your watch list
+                  </>
+                ) : (
+                  <>
+                    <Building2 size={16} style={{display: 'inline', marginRight: '0.25rem', verticalAlign: 'text-bottom'}} />
+                    Showing <strong>{filteredCVEs.length}</strong> of <strong>{activeStats.total}</strong> organization CVEs
+                  </>
+                )}
               </div>
               <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
                 <label style={{fontSize: '0.9rem', color: 'var(--text-muted)'}}>Match Quality:</label>
@@ -499,7 +601,31 @@ function Dashboard() {
                 <p>Loading CVEs...</p>
               </div>
             ) : (
-              <CVEList cves={filteredCVEs} watchList={watchList} />
+              <>
+                {viewMode === 'org' && (
+                  <div style={{
+                    marginBottom: '1rem', 
+                    padding: '1rem', 
+                    background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(168, 85, 247, 0.1))',
+                    borderRadius: 'var(--radius)', 
+                    border: '1px solid rgba(99, 102, 241, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.75rem'
+                  }}>
+                    <Building2 size={24} style={{color: 'var(--primary)', flexShrink: 0}} />
+                    <div>
+                      <div style={{fontWeight: '600', marginBottom: '0.25rem', color: 'var(--text-primary)'}}>
+                        Organization View
+                      </div>
+                      <div style={{fontSize: '0.9rem', color: 'var(--text-muted)'}}>
+                        Viewing all CVEs loaded by any user in the organization. CVEs may not match your personal watch list.
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <CVEList cves={filteredCVEs} watchList={watchList} />
+              </>
             )}
           </>
         )}

@@ -402,25 +402,43 @@ async function processCVE(vulnerability) {
 /**
  * Main function to collect CVEs daily
  */
-async function collectDailyCVEs(daysBack = 1, startOffset = 0) {
+async function collectDailyCVEs(daysBack = 1, startOffset = 0, userId = null) {
   console.log('========== CVE COLLECTION START ==========');
   console.log(`Requested: ${daysBack} days, offset ${startOffset}`);
+  console.log(`User ID: ${userId || 'ALL USERS (scheduled job)'}`);
   
   try {
-    // LOAD ALL USERS' WATCH LISTS
-    const usersSnapshot = await admin.firestore().collection('users').get();
+    // LOAD WATCH LIST (one user or all users for scheduled jobs)
     const allWatchListItems = [];
     
-    for (const userDoc of usersSnapshot.docs) {
+    if (userId) {
+      // Load only the specific user's watch list
+      console.log(`Loading watch list for user: ${userId}`);
       const watchListSnapshot = await admin.firestore()
         .collection('users')
-        .doc(userDoc.id)
+        .doc(userId)
         .collection('watchList')
         .get();
       
       watchListSnapshot.docs.forEach(doc => {
         allWatchListItems.push(doc.data());
       });
+    } else {
+      // Load ALL users' watch lists (for scheduled jobs only)
+      console.log('Loading watch lists for ALL USERS (scheduled job)');
+      const usersSnapshot = await admin.firestore().collection('users').get();
+      
+      for (const userDoc of usersSnapshot.docs) {
+        const watchListSnapshot = await admin.firestore()
+          .collection('users')
+          .doc(userDoc.id)
+          .collection('watchList')
+          .get();
+        
+        watchListSnapshot.docs.forEach(doc => {
+          allWatchListItems.push(doc.data());
+        });
+      }
     }
     
     // Remove duplicates and get unique vendors

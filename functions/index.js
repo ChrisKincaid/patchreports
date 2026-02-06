@@ -53,9 +53,13 @@ exports.collectCVEsManual = functions.runWith({
       daysBack = Math.min(parseInt(data.daysBack), 120);
     }
     console.log(`FINAL daysBack value: ${daysBack}`);
+    
+    // Get userId from authenticated user
+    const userId = context.auth.uid;
+    console.log(`User ID: ${userId}`);
     console.log('================================================');
     
-    const result = await collectDailyCVEs(daysBack);
+    const result = await collectDailyCVEs(daysBack, 0, userId);
     return {
       success: true,
       newCVEs: result.newCVEs,
@@ -97,7 +101,8 @@ exports.loadHistoricalData = functions.runWith({
       console.log(`Chunk ${i + 1}/${chunks}: ${startDaysBack}-${endDaysBack} days back`);
       
       // Fetch CVEs for this chunk
-      const result = await collectDailyCVEs(daysInChunk, startDaysBack);
+      const userId = context.auth.uid;
+      const result = await collectDailyCVEs(daysInChunk, startDaysBack, userId);
       
       totalNewCVEs += result.newCVEs;
       totalCritical += result.criticalCount;
