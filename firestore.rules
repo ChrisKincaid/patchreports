@@ -11,6 +11,11 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
     function validateWatchListItem() {
       return request.resource.data.keys().hasAll(['vendor', 'product', 'addedAt']) &&
              request.resource.data.vendor is string &&
@@ -23,20 +28,32 @@ service cloud.firestore {
     }
     
     function validateUserProfile() {
-      let allowedKeys = ['email', 'createdAt', 'lastChecked', 'notificationsEnabled'];
+      let allowedKeys = ['email', 'createdAt', 'lastChecked', 'notificationsEnabled', 'role'];
       return request.resource.data.keys().hasAll(['email', 'createdAt']) &&
              request.resource.data.keys().hasOnly(allowedKeys) &&
              request.resource.data.email is string &&
-             request.resource.data.email == request.auth.token.email &&
              request.resource.data.createdAt is timestamp;
     }
     
     // User profiles - users can only read/write their own profile
+    // Admins can read all users and update roles
     match /users/{userId} {
-      allow read: if isOwner(userId);
+      allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && validateUserProfile();
-      allow update: if isOwner(userId) && validateUserProfile();
+      allow update: if (isOwner(userId) && validateUserProfile() && 
+                        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))) ||
+                       (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']));
       allow delete: if isOwner(userId);
+      allow list: if isAdmin();
+    }
+    
+    // Invite codes - only admins can create, anyone can read to validate during registration
+    match /inviteCodes/{codeId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAuthenticated(); // Allow marking as used
+      allow delete: if isAdmin();
+      allow list: if isAdmin();
     }
     
     // Watch lists - users can only access their own watch list

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 import { Shield, AlertCircle } from 'lucide-react';
 
@@ -9,15 +9,43 @@ function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const validateInviteCode = async (code) => {
+    try {
+      const codesRef = collection(db, 'inviteCodes');
+      const q = query(
+        codesRef,
+        where('code', '==', code),
+        where('isActive', '==', true),
+        where('usedBy', '==', null)
+      );
+      
+      const snapshot = await getDocs(q);
+      
+      if (snapshot.empty) {
+        return { valid: false, codeDoc: null };
+      }
+      
+      return { valid: true, codeDoc: snapshot.docs[0] };
+    } catch (err) {
+      console.error('Error validating invite code:', err);
+      return { valid: false, codeDoc: null };
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
     // Validation
+    if (!inviteCode || inviteCode.trim() === '') {
+      return setError('Invite code is required');
+    }
+
     if (password !== confirmPassword) {
       return setError('Passwords do not match');
     }
@@ -29,16 +57,31 @@ function Register() {
     setLoading(true);
 
     try {
+      // Validate invite code
+      const { valid, codeDoc } = await validateInviteCode(inviteCode.trim().toUpperCase());
+      
+      if (!valid) {
+        setLoading(false);
+        return setError('Invalid or already used invite code');
+      }
+
       // Create user account
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Create user profile in Firestore
+      // Create user profile in Firestore with 'user' role
       await setDoc(doc(db, 'users', user.uid), {
         email: user.email,
         createdAt: new Date(),
         lastChecked: null,
-        notificationsEnabled: false
+        notificationsEnabled: false,
+        role: 'user'
+      });
+
+      // Mark invite code as used
+      await updateDoc(codeDoc.ref, {
+        usedBy: user.uid,
+        usedAt: new Date()
       });
 
       navigate('/');
@@ -76,6 +119,23 @@ function Register() {
               <span>{error}</span>
             </div>
           )}
+
+          <div className="form-group">
+            <label htmlFor="inviteCode">Invite Code</label>
+            <input
+              id="inviteCode"
+              type="text"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+              required
+              placeholder="XXXX-XXXX-XXXX"
+              maxLength={14}
+              style={{ fontFamily: 'monospace', letterSpacing: '0.05em' }}
+            />
+            <small style={{ color: '#666', fontSize: '0.85rem', marginTop: '4px', display: 'block' }}>
+              You need an invite code to register
+            </small>
+          </div>
 
           <div className="form-group">
             <label htmlFor="email">Email Address</label>

@@ -24,12 +24,13 @@ export function AuthProvider({ children }) {
         const userDoc = await getDoc(userRef);
         
         if (!userDoc.exists()) {
-          // Create new user profile
+          // Create new user profile with default 'user' role
           const newProfile = {
             email: user.email,
             createdAt: new Date(),
             lastChecked: null,
-            notificationsEnabled: false
+            notificationsEnabled: false,
+            role: 'user'
           };
           
           await setDoc(userRef, newProfile);
@@ -47,10 +48,15 @@ export function AuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
+  const isAdmin = () => {
+    return userProfile?.role === 'admin';
+  };
+
   const value = {
     currentUser,
     userProfile,
-    loading
+    loading,
+    isAdmin
   };
 
   return (

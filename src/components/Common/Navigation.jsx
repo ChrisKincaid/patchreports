@@ -2,11 +2,13 @@ import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../firebase';
-import { Shield, Eye, List, Settings as SettingsIcon, LogOut } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { Shield, Eye, List, Settings as SettingsIcon, LogOut, ShieldCheck } from 'lucide-react';
 
 function Navigation() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
 
   const handleLogout = async () => {
     try {
@@ -41,6 +43,12 @@ function Navigation() {
           <SettingsIcon size={18} />
           Settings
         </Link>
+        {isAdmin() && (
+          <Link to="/admin" className={`nav-link ${isActive('/admin')}`}>
+            <ShieldCheck size={18} />
+            Admin
+          </Link>
+        )}
       </div>
 
       <button className="nav-link logout-btn" onClick={handleLogout}>

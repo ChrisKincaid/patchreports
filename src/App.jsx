@@ -8,6 +8,7 @@ import Register from './components/Auth/Register';
 import Dashboard from './components/Dashboard/Dashboard';
 import WatchListManager from './components/WatchList/WatchListManager';
 import Settings from './components/Settings/Settings';
+import AdminPanel from './components/Admin/AdminPanel';
 import Loading from './components/Common/Loading';
 
 function App() {
@@ -50,6 +51,10 @@ function App() {
           <Route 
             path="/settings" 
             element={user ? <Settings /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/admin" 
+            element={user ? <AdminPanel /> : <Navigate to="/login" />} 
           />
         </Routes>
       </Router>
